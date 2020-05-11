@@ -44,9 +44,6 @@ export default function HighScores({navigation}) {
     <View style={{flex: 1, alignItems: 'center', justifyContent: 'center'}}>
       <View style={{margin: 20}}>
         <Text style={styles.text}>Yuksek Skorlar</Text>
-        <Text style={styles.text} onPress={() => GetAllScores()}>
-          Yenile
-        </Text>
         {highScores.map((hs, index) => {
           return (
             <>
@@ -55,7 +52,7 @@ export default function HighScores({navigation}) {
                   {hs.username}
                 </Text>
                 <Text key="score" style={styles.levelText}>
-                  - Score :{hs.highScore}
+                  - Score :{Number(hs.highScore).toFixed(2)}
                 </Text>
                 <Text key="level" style={styles.levelText}>
                   - Level :{hs.subLevel}

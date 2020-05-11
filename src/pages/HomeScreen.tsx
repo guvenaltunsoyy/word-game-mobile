@@ -21,18 +21,16 @@ export default function HomeScreen({navigation}) {
   const [words, setWords] = useState<Word[]>([]);
   const [letters, setLetters] = useState<Array<string>>([]);
   const [word, setWord] = useState<string>('');
-  const [groupId, setGroupId] = useState(4);
   const [level, setLevel] = useState(1);
   const [subLevel, setSubLevel] = useState(1);
-  const [settings, setSettings] = useState(true);
+  const [settings, setSettings] = useState(false);
   const [subSettings, setSubSettings] = useState(false);
   const [shuffling, setShuffling] = useState(false);
-  const [showModal, setShowModal] = useState(true);
   const [firstTime, setFirstTime] = useState(true);
   const [lastMatrix, setLastMatrix] = useState<mModel[]>();
   const [username, setUsername] = useState('');
   const [score, setScore] = useState(0);
-  const [ratio, setRatio] = useState(3);
+  const [ratio, setRatio] = useState(10);
   const [time, setTime] = useState(0);
   const [timerCom, setTimerCom] = useState<any>();
   const [scores, setScores] = useState<any[]>([]);
@@ -98,35 +96,73 @@ export default function HomeScreen({navigation}) {
   }
 
   useEffect(() => {
+    GetAsyncLocalStorage('username')
+      .then((res) => {
+        if (res === undefined) return;
+        let item = JSON.parse(res);
+        console.log(item);
+        if (item !== null && item !== undefined) {
+          setUsername(item ?? '');
+        }
+      })
+      .catch((e) => console.error(e));
     if (shuffling) {
       shuffle(letters);
       setShuffling(false);
     }
     if (firstTime) {
+      console.log('firstTime');
+
       GetAsyncLocalStorage('userInfo')
         .then((res) => {
           if (res === undefined) return;
           let item = JSON.parse(res);
           if (item !== null && item !== undefined) {
-            setUsername(item.username ?? '');
             setScore(item.score ?? 0);
             setTime(item.time ?? 0);
             setLevel(item.level ?? 1);
             setSubLevel(item.subLevel ?? 1);
+            setLastMatrix(JSON.parse(item.matrix) ?? []);
+            setLetters(JSON.parse(item.letter) ?? '');
+            setWords(JSON.parse(item.words) ?? []);
+            setRatio(item.ratio ?? 10);
+
+            JSON.parse(item.words).map(async (tempW: Word) => {
+              const w = JSON.parse(JSON.stringify(tempW));
+              console.log(w);
+              if (w.IsFound) {
+                w.Coordinates.map((loc) => {
+                  lastMatrix?.map((m) => {
+                    if (m.X === loc.x && m.Y === loc.y) {
+                      m.ShowLetter = true;
+                    }
+                  });
+                });
+                w.IsFound = true;
+              }
+            });
           }
         })
         .catch((e) => console.error(e));
+
       GetAsyncLocalStorage(`highScores`).then((rs) => {
         if (rs !== undefined) {
           const result = JSON.parse(rs);
           let i = 0;
-          result.map((m) => {
-            allScores[i].username = m.username;
-            allScores[i].level = m.level;
-            allScores[i].subLevel = m.subLevel;
-            allScores[i].highScore = m.s;
-            i++;
-          });
+          result.map(
+            (m: {
+              username: string;
+              level: number;
+              subLevel: number;
+              s: number;
+            }) => {
+              allScores[i].username = m.username;
+              allScores[i].level = m.level;
+              allScores[i].subLevel = m.subLevel;
+              allScores[i].highScore = m.s;
+              i++;
+            },
+          );
         }
       });
       setScores(allScores);
@@ -145,11 +181,13 @@ export default function HomeScreen({navigation}) {
     setLastMatrix([]);
     setScore(0);
     setTime(0);
+    setRatio(10);
+    clearInterval(timerCom);
     console.info('Game Started');
     let res = await http<string[][]>(
-      `http://da57dc27.ngrok.io/api/words/${groupId}/${wordCount}`,
+      `http://52a368c4.ngrok.io/api/words/${level}/${subLevel}`,
     );
-    http<Word[]>('http://da57dc27.ngrok.io/api/words').then((response) => {
+    http<Word[]>('http://52a368c4.ngrok.io/api/words').then((response) => {
       setWords(response);
       let _letters = response[0];
       let press = response.find((l) => {
@@ -180,6 +218,7 @@ export default function HomeScreen({navigation}) {
   function startTimer() {
     const timer = setInterval(() => {
       setTime((t) => t + 1);
+      setRatio((r) => r - 0.1);
     }, 1000);
     setTimerCom(timer);
   }
@@ -192,28 +231,31 @@ export default function HomeScreen({navigation}) {
         time: time,
         level: level,
         subLevel: subLevel,
-      }).toString(),
+        matrix: JSON.stringify(lastMatrix),
+        letter: JSON.stringify(letters),
+        words: JSON.stringify(words),
+        ratio: ratio,
+      }),
     );
   }
   async function SaveHighScoreGame(s: number) {
     //console.log(`saveHighScore ${s} subLevel ${level} ${subLevel}`);
     let currentHighScore = await GetAsyncLocalStorage(`highScores`);
-    if (
-      currentHighScore !== undefined &&
-      JSON.parse(currentHighScore).highScore > s
-    ) {
-      console.info(
-        `current score high ${JSON.parse(currentHighScore).highScore}`,
-      );
-    } else {
-      //console.info(`high${subLevel}Score changed`);
-      scores[subLevel - 1].username = username;
-      scores[subLevel - 1].level = level;
-      scores[subLevel - 1].subLevel = subLevel;
-      scores[subLevel - 1].highScore = s;
-      setScores(scores);
-      await SetAsyncLocalStorage(`highScores`, JSON.stringify(scores));
-      console.log(JSON.stringify(scores));
+    if (currentHighScore !== undefined) {
+      const tempScores = JSON.parse(currentHighScore);
+      setScores(tempScores);
+      if (tempScores[subLevel - 1].highScore > s) {
+        console.info(`current score high ${JSON.parse(currentHighScore)}`);
+      } else {
+        //console.info(`high${subLevel}Score changed`);
+        tempScores[subLevel - 1].username = username;
+        tempScores[subLevel - 1].level = level;
+        tempScores[subLevel - 1].subLevel = subLevel;
+        tempScores[subLevel - 1].highScore = s;
+        setScores(tempScores);
+        await SetAsyncLocalStorage(`highScores`, JSON.stringify(tempScores));
+        console.log(JSON.stringify(scores));
+      }
     }
   }
   async function CheckWords(s: number) {
@@ -245,8 +287,7 @@ export default function HomeScreen({navigation}) {
       if (w.WordModel.Word === word + l && !w.IsFound) {
         // WORD FOUND
         setScore(score + w.Coordinates.length * ratio);
-        await SaveGame(score + w.Coordinates.length * ratio);
-        //console.debug(word + l);
+        console.log(ratio);
         w.Coordinates.map((loc) => {
           lastMatrix?.map((m) => {
             if (m.X === loc.x && m.Y === loc.y) {
@@ -255,6 +296,7 @@ export default function HomeScreen({navigation}) {
           });
         });
         w.IsFound = true;
+        await SaveGame(score + w.Coordinates.length * ratio);
         setWord('');
         await CheckWords(score + w.Coordinates.length * ratio);
       }
@@ -281,13 +323,14 @@ export default function HomeScreen({navigation}) {
       return null;
     }
   }
-  const SettingsModal = (props) => {
-    console.log('show setting');
 
-    return (
+  return (
+    <>
+      <StatusBar barStyle="dark-content" />
+      <Title />
       <Modal
         key="settings"
-        isVisible={props.settings}
+        isVisible={settings}
         deviceWidth={deviceWidth}
         deviceHeight={deviceHeight}
         style={{
@@ -306,7 +349,7 @@ export default function HomeScreen({navigation}) {
             <Text
               style={styles.levelText}
               onPress={() => {
-                setLevel(1);
+                setLevel(3);
                 setSubSettings(true);
               }}>
               1.Seviye
@@ -314,7 +357,7 @@ export default function HomeScreen({navigation}) {
             <Text
               style={styles.levelText}
               onPress={() => {
-                setLevel(2);
+                setLevel(4);
                 setSubSettings(true);
               }}>
               2.Seviye
@@ -322,7 +365,7 @@ export default function HomeScreen({navigation}) {
             <Text
               style={styles.levelText}
               onPress={() => {
-                setLevel(3);
+                setLevel(5);
                 setSubSettings(true);
               }}>
               3.Seviye
@@ -387,57 +430,7 @@ export default function HomeScreen({navigation}) {
           </View>
         </View>
       </Modal>
-    );
-  };
-  return (
-    <>
-      <StatusBar barStyle="dark-content" />
-      <Title />
-      <SettingsModal settings={settings} />
-
       <View style={styles.mainContainer}>
-        <Modal
-          isVisible={showModal}
-          deviceWidth={deviceWidth}
-          deviceHeight={deviceHeight}
-          style={{
-            flex: 1,
-            backgroundColor: 'white',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            alignSelf: 'center',
-            marginTop: 350,
-            marginBottom: 350,
-            borderRadius: 20,
-          }}>
-          <View style={{margin: 40}}>
-            <Text style={styles.text}>Kullanıcı adı giriniz 📝</Text>
-            <TextInput
-              style={{
-                height: 50,
-                padding: 10,
-                margin: 10,
-                borderColor: 'gray',
-                borderWidth: 1,
-                color: '#af9a7d',
-                fontWeight: 'bold',
-                fontSize: 20,
-              }}
-              onChangeText={async (text) => {
-                setUsername(text);
-              }}
-              value={username}
-            />
-            <Button
-              title="Tamam"
-              color="#af9a7d"
-              onPress={() => {
-                setUsername(username);
-                setShowModal(false);
-              }}
-            />
-          </View>
-        </Modal>
         <View style={styles.row}>
           <Text
             style={styles.text}
@@ -450,8 +443,10 @@ export default function HomeScreen({navigation}) {
             ⚙️ Ayarlar
           </Text>
         </View>
-        <Text style={styles.text} onPress={() => setShowModal(true)}>
-          🙍🏼 {username} - Skor : {score} - Sure : {time}
+        <Text
+          style={styles.text}
+          onPress={() => navigation.navigate('Welcome')}>
+          🙍🏼 {username} - Skor : {score.toFixed(2)} - Sure : {time}
         </Text>
         <View style={styles.puzzleContainer}>
           {lastMatrix?.map((row, i) => {
@@ -474,6 +469,13 @@ export default function HomeScreen({navigation}) {
             }}
             style={styles.text}>
             Başlat ☑️
+          </Text>
+          <Text
+            onPress={() => {
+              startTimer();
+            }}
+            style={styles.text}>
+            Devam ⏯
           </Text>
           <Text
             onPress={() => {
